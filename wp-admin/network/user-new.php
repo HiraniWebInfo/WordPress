@@ -59,7 +59,7 @@ if ( isset($_REQUEST['action']) && 'add-user' == $_REQUEST['action'] ) {
 			  * @param int $user_id ID of the newly created user.
 			  */
 			do_action( 'network_user_new_created_user', $user_id );
-			wp_redirect( add_query_arg( array('update' => 'added'), 'user-new.php' ) );
+			wp_redirect( add_query_arg( array('update' => 'added', 'user_id' => $user_id ), 'user-new.php' ) );
 			exit;
 		}
 	}
@@ -67,8 +67,22 @@ if ( isset($_REQUEST['action']) && 'add-user' == $_REQUEST['action'] ) {
 
 if ( isset($_GET['update']) ) {
 	$messages = array();
-	if ( 'added' == $_GET['update'] )
-		$messages[] = __('User added.');
+	if ( 'added' == $_GET['update'] ) {
+		$edit_link = '';
+		if ( isset( $_GET['user_id'] ) ) {
+			$user_id_new = absint( $_GET['user_id'] );
+			if ( $user_id_new ) {
+				$edit_link = esc_url( add_query_arg( 'wp_http_referer', urlencode( wp_unslash( $_SERVER['REQUEST_URI'] ) ), get_edit_user_link( $user_id_new ) ) );
+			}
+		}
+
+		if ( empty( $edit_link ) ) {
+			$messages[] = __( 'User added.' );
+		} else {
+			/* translators: %s: edit page url */
+			$messages[] = sprintf( __( 'User added. <a href="%s">Edit user</a>' ), $edit_link );
+		}
+	}
 }
 
 $title = __('Add New User');

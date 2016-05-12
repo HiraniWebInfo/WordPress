@@ -128,11 +128,10 @@ function check_comment($author, $email, $url, $comment, $user_ip, $user_agent, $
  * Retrieve the approved comments for post $post_id.
  *
  * @since 2.0.0
- * @since 4.1.0 Refactored to leverage {@see WP_Comment_Query} over a direct query.
+ * @since 4.1.0 Refactored to leverage WP_Comment_Query over a direct query.
  *
  * @param  int   $post_id The ID of the post.
- * @param  array $args    Optional. See {@see WP_Comment_Query::query()} for information
- *                        on accepted arguments.
+ * @param  array $args    Optional. See WP_Comment_Query::query() for information on accepted arguments.
  * @return int|array $comments The approved comments, or number of comments if `$count`
  *                             argument is true.
  */
@@ -210,7 +209,7 @@ function get_comment( &$comment = null, $output = OBJECT ) {
  *
  * @since 2.7.0
  *
- * @param string|array $args Optional. Array or string of arguments. See {@see WP_Comment_Query::parse_query()}
+ * @param string|array $args Optional. Array or string of arguments. See WP_Comment_Query::parse_query()
  *                           for information on accepted arguments. Default empty.
  * @return int|array List of comments or number of found comments if `$count` argument is true.
  */
@@ -469,7 +468,7 @@ function update_comment_meta($comment_id, $meta_key, $meta_value, $prev_value = 
 }
 
 /**
- * Queue comments for metadata lazyloading.
+ * Queues comments for metadata lazy-loading.
  *
  * @since 4.5.0
  *
@@ -972,7 +971,7 @@ function get_page_of_comment( $comment_ID, $args = array() ) {
 }
 
 /**
- * Get the maximum character lengths for the comment form fields.
+ * Retrieves the maximum character lengths for the comment form fields.
  *
  * @since 4.5.0
  *
@@ -1021,7 +1020,7 @@ function wp_get_comment_fields_max_lengths() {
 	 *
 	 * @since 4.5.0
 	 *
-	 * @param array  $lengths Associative array 'field_name' => 'maximum length'.
+	 * @param array $lengths Associative array `'field_name' => 'maximum length'`.
 	 */
 	return apply_filters( 'wp_get_comment_fields_max_lengths', $lengths );
 }
@@ -2203,7 +2202,7 @@ function discover_pingback_server_uri( $url, $deprecated = '' ) {
 	/** @todo Should use Filter Extension or custom preg_match instead. */
 	$parsed_url = parse_url($url);
 
-	if ( ! isset( $parsed_url['host'] ) ) // Not an URL. This should never happen.
+	if ( ! isset( $parsed_url['host'] ) ) // Not a URL. This should never happen.
 		return false;
 
 	//Do not search for a pingback server on our own uploads
@@ -2570,7 +2569,7 @@ function clean_comment_cache($ids) {
 		wp_cache_delete( $id, 'comment' );
 
 		/**
-		 * Fires after a comment has been removed from the object cache.
+		 * Fires immediately after a comment has been removed from the object cache.
 		 *
 		 * @since 4.5.0
 		 *

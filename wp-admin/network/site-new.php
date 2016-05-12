@@ -49,7 +49,12 @@ if ( isset($_REQUEST['action']) && 'add-site' == $_REQUEST['action'] ) {
 		$subdirectory_reserved_names = get_subdirectory_reserved_names();
 
 		if ( in_array( $domain, $subdirectory_reserved_names ) ) {
-			wp_die( sprintf( __( 'The following words are reserved for use by WordPress functions and cannot be used as blog names: <code>%s</code>' ), implode( '</code>, <code>', $subdirectory_reserved_names ) ) );
+			wp_die(
+				/* translators: %s: reserved names list */
+				sprintf( __( 'The following words are reserved for use by WordPress functions and cannot be used as blog names: %s' ),
+					'<code>' . implode( '</code>, <code>', $subdirectory_reserved_names ) . '</code>'
+				)
+			);
 		}
 	}
 
@@ -91,7 +96,7 @@ if ( isset($_REQUEST['action']) && 'add-site' == $_REQUEST['action'] ) {
 	$user_id = email_exists($email);
 	if ( !$user_id ) { // Create a new user with a random password
 		/**
-		 * Fires before a new user is created via the network site-new.php page.
+		 * Fires immediately before a new user is created via the network site-new.php page.
 		 *
 		 * @since 4.5.0
 		 *
@@ -189,7 +194,7 @@ if ( ! empty( $messages ) ) {
 <?php wp_nonce_field( 'add-blog', '_wpnonce_add-blog' ) ?>
 	<table class="form-table">
 		<tr class="form-field form-required">
-			<th scope="row"><label for="site-address"><?php _e( 'Site Address' ) ?></label></th>
+			<th scope="row"><label for="site-address"><?php _e( 'Site Address (URL)' ) ?></label></th>
 			<td>
 			<?php if ( is_subdomain_install() ) { ?>
 				<input name="blog[domain]" type="text" class="regular-text" id="site-address" aria-describedby="site-address-desc" autocapitalize="none" autocorrect="off"/><span class="no-break">.<?php echo preg_replace( '|^www\.|', '', $current_site->domain ); ?></span>

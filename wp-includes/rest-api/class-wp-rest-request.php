@@ -20,8 +20,7 @@
  * does not distinguish between arguments of the same name for different request methods.
  * For instance, in a request with `GET id=1` and `POST id=2`, `$request['id']` will equal
  * 2 (`POST`) not 1 (`GET`). For more precision between request methods, use
- * {@see WP_REST_Request::get_body_params()}, {@see WP_REST_Request::get_url_params()},
- * etc.
+ * WP_REST_Request::get_body_params(), WP_REST_Request::get_url_params(), etc.
  *
  * @since 4.4.0
  *
@@ -936,9 +935,11 @@ class WP_REST_Request implements ArrayAccess {
 	}
 
 	/**
-	 * Gets a WP_REST_Request object from a full URL.
+	 * Retrieves a WP_REST_Request object from a full URL.
 	 *
+	 * @static
 	 * @since 4.5.0
+	 * @access public
 	 *
 	 * @param string $url URL with protocol, domain, path and query args.
 	 * @return WP_REST_Request|false WP_REST_Request object on success, false on failure.
@@ -973,8 +974,9 @@ class WP_REST_Request implements ArrayAccess {
 		 *
 		 * @since 4.5.0
 		 *
-		 * @param WP_REST_Request|false $request Generated request object, or false if URL could not be parsed.
-		 * @param string $url URL the request was generated from.
+		 * @param WP_REST_Request|false $request Generated request object, or false if URL
+		 *                                       could not be parsed.
+		 * @param string                $url     URL the request was generated from.
 		 */
 		return apply_filters( 'rest_request_from_url', $request, $url );
 	}

@@ -36,14 +36,13 @@ function get_header( $name = null ) {
 
 	$templates = array();
 	$name = (string) $name;
-	if ( '' !== $name )
+	if ( '' !== $name ) {
 		$templates[] = "header-{$name}.php";
+	}
 
 	$templates[] = 'header.php';
 
-	// Backward compat code will be removed in a future release
-	if ('' == locate_template($templates, true))
-		load_template( ABSPATH . WPINC . '/theme-compat/header.php');
+	locate_template( $templates, true );
 }
 
 /**
@@ -76,14 +75,13 @@ function get_footer( $name = null ) {
 
 	$templates = array();
 	$name = (string) $name;
-	if ( '' !== $name )
+	if ( '' !== $name ) {
 		$templates[] = "footer-{$name}.php";
+	}
 
-	$templates[] = 'footer.php';
+	$templates[]    = 'footer.php';
 
-	// Backward compat code will be removed in a future release
-	if ('' == locate_template($templates, true))
-		load_template( ABSPATH . WPINC . '/theme-compat/footer.php');
+	locate_template( $templates, true );
 }
 
 /**
@@ -121,9 +119,7 @@ function get_sidebar( $name = null ) {
 
 	$templates[] = 'sidebar.php';
 
-	// Backward compat code will be removed in a future release
-	if ('' == locate_template($templates, true))
-		load_template( ABSPATH . WPINC . '/theme-compat/sidebar.php');
+	locate_template( $templates, true );
 }
 
 /**
@@ -712,8 +708,15 @@ function get_bloginfo( $show = '', $filter = 'raw' ) {
 			$output = $wp_version;
 			break;
 		case 'language':
-			$output = get_locale();
-			$output = str_replace('_', '-', $output);
+			/* translators: Translate this to the correct language tag for your locale,
+			 * see https://www.w3.org/International/articles/language-tags/ for reference.
+			 * Do not translate into your own language.
+			 */
+			$output = __( 'html_lang_attribute' );
+			if ( 'html_lang_attribute' === $output || preg_match( '/[^a-zA-Z0-9-]/', $output ) ) {
+				$output = get_locale();
+				$output = str_replace( '_', '-', $output );
+			}
 			break;
 		case 'text_direction':
 			_deprecated_argument( __FUNCTION__, '2.2', sprintf(
@@ -833,6 +836,88 @@ function site_icon_url( $size = 512, $url = '', $blog_id = 0 ) {
  */
 function has_site_icon( $blog_id = 0 ) {
 	return (bool) get_site_icon_url( 512, '', $blog_id );
+}
+
+/**
+ * Determines whether the site has a custom logo.
+ *
+ * @since 4.5.0
+ *
+ * @param int $blog_id Optional. ID of the blog in question. Default is the ID of the current blog.
+ * @return bool Whether the site has a custom logo or not.
+ */
+function has_custom_logo( $blog_id = 0 ) {
+	if ( is_multisite() && (int) $blog_id !== get_current_blog_id() ) {
+		switch_to_blog( $blog_id );
+	}
+
+	$custom_logo_id = get_theme_mod( 'custom_logo' );
+
+	if ( is_multisite() && ms_is_switched() ) {
+		restore_current_blog();
+	}
+
+	return (bool) $custom_logo_id;
+}
+
+/**
+ * Returns a custom logo, linked to home.
+ *
+ * @since 4.5.0
+ *
+ * @param int $blog_id Optional. ID of the blog in question. Default is the ID of the current blog.
+ * @return string Custom logo markup.
+ */
+function get_custom_logo( $blog_id = 0 ) {
+	$html = '';
+
+	if ( is_multisite() && (int) $blog_id !== get_current_blog_id() ) {
+		switch_to_blog( $blog_id );
+	}
+
+	$custom_logo_id = get_theme_mod( 'custom_logo' );
+
+	// We have a logo. Logo is go.
+	if ( $custom_logo_id ) {
+		$html = sprintf( '<a href="%1$s" class="custom-logo-link" rel="home" itemprop="url">%2$s</a>',
+			esc_url( home_url( '/' ) ),
+			wp_get_attachment_image( $custom_logo_id, 'full', false, array(
+				'class'    => 'custom-logo',
+				'itemprop' => 'logo',
+			) )
+		);
+	}
+
+	// If no logo is set but we're in the Customizer, leave a placeholder (needed for the live preview).
+	elseif ( is_customize_preview() ) {
+		$html = sprintf( '<a href="%1$s" class="custom-logo-link" style="display:none;"><img class="custom-logo"/></a>',
+			esc_url( home_url( '/' ) )
+		);
+	}
+
+	if ( is_multisite() && ms_is_switched() ) {
+		restore_current_blog();
+	}
+
+	/**
+	 * Filter the custom logo output.
+	 *
+	 * @since 4.5.0
+	 *
+	 * @param string $html Custom logo HTML output.
+	 */
+	return apply_filters( 'get_custom_logo', $html );
+}
+
+/**
+ * Displays a custom logo, linked to home.
+ *
+ * @since 4.5.0
+ *
+ * @param int $blog_id Optional. ID of the blog in question. Default is the ID of the current blog.
+ */
+function the_custom_logo( $blog_id = 0 ) {
+	echo get_custom_logo( $blog_id );
 }
 
 /**
@@ -1503,7 +1588,7 @@ function get_archives_link($url, $text, $format = 'html', $before = '', $after =
 	 * Filter the archive link content.
 	 *
 	 * @since 2.6.0
-	 * @since 4.5.0 Added `$url`, `$text`, `$format`, `$before`, and `$after` params.
+	 * @since 4.5.0 Added the `$url`, `$text`, `$format`, `$before`, and `$after` parameters.
 	 *
 	 * @param string $link_html The archive HTML link content.
 	 * @param string $url       URL to archive.
@@ -1585,22 +1670,6 @@ function wp_get_archives( $args = '' ) {
 
 	// this is what will separate dates on weekly archive links
 	$archive_week_separator = '&#8211;';
-
-	// over-ride general date format ? 0 = no: use the date format set in Options, 1 = yes: over-ride
-	$archive_date_format_over_ride = 0;
-
-	// options for daily archive (only if you over-ride the general date format)
-	$archive_day_date_format = 'Y/m/d';
-
-	// options for weekly archive (only if you over-ride the general date format)
-	$archive_week_start_date_format = 'Y/m/d';
-	$archive_week_end_date_format	= 'Y/m/d';
-
-	if ( ! $archive_date_format_over_ride ) {
-		$archive_day_date_format = get_option( 'date_format' );
-		$archive_week_start_date_format = get_option( 'date_format' );
-		$archive_week_end_date_format = get_option( 'date_format' );
-	}
 
 	$sql_where = $wpdb->prepare( "WHERE post_type = %s AND post_status = 'publish'", $r['post_type'] );
 
@@ -1695,7 +1764,7 @@ function wp_get_archives( $args = '' ) {
 					$url = add_query_arg( 'post_type', $r['post_type'], $url );
 				}
 				$date = sprintf( '%1$d-%2$02d-%3$02d 00:00:00', $result->year, $result->month, $result->dayofmonth );
-				$text = mysql2date( $archive_day_date_format, $date );
+				$text = mysql2date( get_option( 'date_format' ), $date );
 				if ( $r['show_post_count'] ) {
 					$r['after'] = '&nbsp;(' . $result->posts . ')' . $after;
 				}
@@ -1719,8 +1788,8 @@ function wp_get_archives( $args = '' ) {
 					$arc_year       = $result->yr;
 					$arc_w_last     = $result->week;
 					$arc_week       = get_weekstartend( $result->yyyymmdd, get_option( 'start_of_week' ) );
-					$arc_week_start = date_i18n( $archive_week_start_date_format, $arc_week['start'] );
-					$arc_week_end   = date_i18n( $archive_week_end_date_format, $arc_week['end'] );
+					$arc_week_start = date_i18n( get_option( 'date_format' ), $arc_week['start'] );
+					$arc_week_end   = date_i18n( get_option( 'date_format' ), $arc_week['end'] );
 					$url            = sprintf( '%1$s/%2$s%3$sm%4$s%5$s%6$sw%7$s%8$d', home_url(), '', '?', '=', $arc_year, '&amp;', '=', $result->week );
 					if ( 'post' !== $r['post_type'] ) {
 						$url = add_query_arg( 'post_type', $r['post_type'], $url );
@@ -2234,7 +2303,7 @@ function the_time( $d = '' ) {
  *                          was written. Either 'G', 'U', or php date format defaults
  *                          to the value specified in the time_format option. Default empty.
  * @param int|WP_Post $post WP_Post object or ID. Default is global $post object.
- * @return false|string Formatted date string or Unix timestamp. False on failure.
+ * @return string|int|false Formatted date string or Unix timestamp if `$id` is 'U' or 'G'. False on failure.
  */
 function get_the_time( $d = '', $post = null ) {
 	$post = get_post($post);
@@ -2272,7 +2341,7 @@ function get_the_time( $d = '', $post = null ) {
  * @param bool        $gmt       Optional. Whether to retrieve the GMT time. Default false.
  * @param int|WP_Post $post      WP_Post object or ID. Default is global $post object.
  * @param bool        $translate Whether to translate the time string. Default false.
- * @return false|string|int Formatted date string or Unix timestamp. False on failure.
+ * @return string|int|false Formatted date string or Unix timestamp if `$id` is 'U' or 'G'. False on failure.
  */
 function get_post_time( $d = 'U', $gmt = false, $post = null, $translate = false ) {
 	$post = get_post($post);
@@ -2359,7 +2428,7 @@ function get_the_modified_time($d = '') {
  * @param bool        $gmt       Optional. Whether to retrieve the GMT time. Default false.
  * @param int|WP_Post $post      WP_Post object or ID. Default is global $post object.
  * @param bool        $translate Whether to translate the time string. Default false.
- * @return false|string Formatted date string or Unix timestamp. False on failure.
+ * @return string|int|false Formatted date string or Unix timestamp if `$id` is 'U' or 'G'. False on failure.
  */
 function get_post_modified_time( $d = 'U', $gmt = false, $post = null, $translate = false ) {
 	$post = get_post($post);
@@ -3408,7 +3477,7 @@ function get_the_generator( $type = '' ) {
 	 *
 	 * @since 2.5.0
 	 *
-	 * @param string $gen  The HTML markup output to {@see wp_head()}.
+	 * @param string $gen  The HTML markup output to wp_head().
 	 * @param string $type The type of generator. Accepts 'html', 'xhtml', 'atom',
 	 *                     'rss2', 'rdf', 'comment', 'export'.
 	 */

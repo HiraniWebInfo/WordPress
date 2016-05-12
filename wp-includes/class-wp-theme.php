@@ -343,7 +343,8 @@ final class WP_Theme implements ArrayAccess {
 	 *
 	 * @staticvar array $properties
 	 *
-	 * @return bool
+	 * @param string $offset Property to check if set.
+	 * @return bool Whether the given property is set.
 	 */
 	public function __isset( $offset ) {
 		static $properties = array(
@@ -436,7 +437,7 @@ final class WP_Theme implements ArrayAccess {
 	 * translated data. We are doing so now as it is safe to do. However, as
 	 * Name and Title could have been used as the key for get_themes(), both remain
 	 * untranslated for back compatibility. This means that ['Name'] is not ideal,
-	 * and care should be taken to use $theme->display('Name') to get a properly
+	 * and care should be taken to use `$theme::display( 'Name' )` to get a properly
 	 * translated header.
 	 *
 	 * @param mixed $offset
@@ -1315,12 +1316,70 @@ final class WP_Theme implements ArrayAccess {
 	}
 
 	/**
-	 * Sort themes by name.
+	 * Enable a theme for all sites on the current network.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @static
+	 * @access public
+	 *
+	 * @param string|array $stylesheets Stylesheet name or array of stylesheet names.
+	 */
+	public static function network_enable_theme( $stylesheets ) {
+		if ( ! is_multisite() ) {
+			return;
+		}
+
+		if ( ! is_array( $stylesheets ) ) {
+			$stylesheets = array( $stylesheets );
+		}
+
+		$allowed_themes = get_site_option( 'allowedthemes' );
+		foreach ( $stylesheets as $stylesheet ) {
+			$allowed_themes[ $stylesheet ] = true;
+		}
+
+		update_site_option( 'allowedthemes', $allowed_themes );
+	}
+
+	/**
+	 * Disable a theme for all sites on the current network.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @static
+	 * @access public
+	 *
+	 * @param string|array $stylesheets Stylesheet name or array of stylesheet names.
+	 */
+	public static function network_disable_theme( $stylesheets ) {
+		if ( ! is_multisite() ) {
+			return;
+		}
+
+		if ( ! is_array( $stylesheets ) ) {
+			$stylesheets = array( $stylesheets );
+		}
+
+		$allowed_themes = get_site_option( 'allowedthemes' );
+		foreach ( $stylesheets as $stylesheet ) {
+			if ( isset( $allowed_themes[ $stylesheet ] ) ) {
+				unset( $allowed_themes[ $stylesheet ] );
+			}
+		}
+
+		update_site_option( 'allowedthemes', $allowed_themes );
+	}
+
+	/**
+	 * Sorts themes by name.
 	 *
 	 * @since 3.4.0
 	 *
 	 * @static
 	 * @access public
+	 *
+	 * @param array $themes Array of themes to sort, passed by reference.
 	 */
 	public static function sort_by_name( &$themes ) {
 		if ( 0 === strpos( get_locale(), 'en_' ) ) {
@@ -1341,7 +1400,10 @@ final class WP_Theme implements ArrayAccess {
 	 * @static
 	 * @access private
 	 *
-	 * @return int
+	 * @param string $a First name.
+	 * @param string $b Second name.
+	 * @return int Negative if `$a` falls lower in the natural order than `$b`. Zero if they fall equally.
+	 *             Greater than 0 if `$a` falls higher in the natural order than `$b`. Used with usort().
 	 */
 	private static function _name_sort( $a, $b ) {
 		return strnatcasecmp( $a->headers['Name'], $b->headers['Name'] );
@@ -1355,7 +1417,10 @@ final class WP_Theme implements ArrayAccess {
 	 * @static
 	 * @access private
 	 *
-	 * @return int
+	 * @param string $a First name.
+	 * @param string $b Second name.
+	 * @return int Negative if `$a` falls lower in the natural order than `$b`. Zero if they fall equally.
+	 *             Greater than 0 if `$a` falls higher in the natural order than `$b`. Used with usort().
 	 */
 	private static function _name_sort_i18n( $a, $b ) {
 		// Don't mark up; Do translate.

@@ -11,6 +11,10 @@
  * using the undo shortcut, or the undo button in the toolbar.
  */
 ( function( tinymce, setTimeout ) {
+	if ( tinymce.Env.ie && tinymce.Env.ie < 9 ) {
+		return;
+	}
+
 	tinymce.PluginManager.add( 'wptextpattern', function( editor ) {
 		var VK = tinymce.util.VK;
 
@@ -25,22 +29,16 @@
 			{ start: '####', format: 'h4' },
 			{ start: '#####', format: 'h5' },
 			{ start: '######', format: 'h6' },
-			{ start: '>', format: 'blockquote' }
+			{ start: '>', format: 'blockquote' },
+			{ regExp: /^(-){3,}$/, element: 'hr' }
 		];
 
 		var inlinePatterns = [
-			{ start: '*', end: '*', format: 'italic' },
-			{ start: '**', end: '**', format: 'bold' },
-			{ start: '_', end: '_', format: 'italic' },
-			{ start: '__', end: '__', format: 'bold' },
 			{ start: '`', end: '`', format: 'code' }
 		];
 
 		var canUndo;
-		var refNode;
-		var refPattern;
 		var chars = [];
-		var zeroWidthSpaceNode;
 
 		tinymce.each( inlinePatterns, function( pattern ) {
 			tinymce.each( ( pattern.start + pattern.end ).split( '' ), function( c ) {
@@ -51,17 +49,7 @@
 		} );
 
 		editor.on( 'selectionchange', function() {
-			var offset;
-
 			canUndo = null;
-
-			if ( zeroWidthSpaceNode ) {
-				offset = zeroWidthSpaceNode.data.indexOf( '\u200b' );
-
-				if ( offset !== -1 ) {
-					zeroWidthSpaceNode.deleteData( offset, offset + 1 );
-				}
-			}
 		} );
 
 		editor.on( 'keydown', function( event ) {
@@ -72,15 +60,13 @@
 			}
 
 			if ( event.keyCode === VK.ENTER && ! VK.modifierPressed( event ) ) {
-				watchEnter();
+				enter();
 			}
 		}, true );
 
 		editor.on( 'keyup', function( event ) {
 			if ( event.keyCode === VK.SPACEBAR && ! event.ctrlKey && ! event.metaKey && ! event.altKey ) {
 				space();
-			} else if ( event.keyCode === VK.ENTER && ! VK.modifierPressed( event ) ) {
-				enter();
 			} else if ( event.keyCode > 47 && ! ( event.keyCode >= 91 && event.keyCode <= 93 ) ) {
 				inline();
 			}
@@ -96,7 +82,7 @@
 			var format;
 			var zero;
 
-			if ( node.nodeType !== 3 || ! node.data.length || ! offset ) {
+			if ( ! node || node.nodeType !== 3 || ! node.data.length || ! offset ) {
 				return;
 			}
 
@@ -155,7 +141,18 @@
 				// We need to wait for native events to be triggered.
 				setTimeout( function() {
 					canUndo = 'space';
-					zeroWidthSpaceNode = zero;
+
+					editor.once( 'selectionchange', function() {
+						var offset;
+
+						if ( zero ) {
+							offset = zero.data.indexOf( '\u200b' );
+
+							if ( offset !== -1 ) {
+								zero.deleteData( offset, offset + 1 );
+							}
+						}
+					} );
 				} );
 			}
 		}
@@ -233,12 +230,12 @@
 			} );
 		}
 
-		function watchEnter() {
+		function enter() {
 			var rng = editor.selection.getRng(),
 				start = rng.startContainer,
 				node = firstTextNode( start ),
 				i = enterPatterns.length,
-				text, pattern;
+				text, pattern, parent;
 
 			if ( ! node ) {
 				return;
@@ -247,10 +244,17 @@
 			text = node.data;
 
 			while ( i-- ) {
-				 if ( text.indexOf( enterPatterns[ i ].start ) === 0 ) {
-				 	pattern = enterPatterns[ i ];
-				 	break;
-				 }
+				if ( enterPatterns[ i ].start ) {
+					if ( text.indexOf( enterPatterns[ i ].start ) === 0 ) {
+						pattern = enterPatterns[ i ];
+						break;
+					}
+				} else if ( enterPatterns[ i ].regExp ) {
+					if ( enterPatterns[ i ].regExp.test( text ) ) {
+						pattern = enterPatterns[ i ];
+						break;
+					}
+				}
 			}
 
 			if ( ! pattern ) {
@@ -261,31 +265,31 @@
 				return;
 			}
 
-			refNode = node;
-			refPattern = pattern;
-		}
-
-		function ltrim( text ) {
-			return text ? text.replace( /^\s+/, '' ) : '';
-		}
-
-		function enter() {
-			if ( refNode ) {
+			editor.once( 'keyup', function() {
 				editor.undoManager.add();
 
 				editor.undoManager.transact( function() {
-					editor.formatter.apply( refPattern.format, {}, refNode );
-					refNode.replaceData( 0, refNode.data.length, ltrim( refNode.data.slice( refPattern.start.length ) ) );
+					if ( pattern.format ) {
+						editor.formatter.apply( pattern.format, {}, node );
+						node.replaceData( 0, node.data.length, ltrim( node.data.slice( pattern.start.length ) ) );
+					} else if ( pattern.element ) {
+						parent = node.parentNode && node.parentNode.parentNode;
+
+						if ( parent ) {
+							parent.replaceChild( document.createElement( pattern.element ), node.parentNode );
+						}
+					}
 				} );
 
 				// We need to wait for native events to be triggered.
 				setTimeout( function() {
 					canUndo = 'enter';
 				} );
-			}
+			} );
+		}
 
-			refNode = null;
-			refPattern = null;
+		function ltrim( text ) {
+			return text ? text.replace( /^\s+/, '' ) : '';
 		}
 	} );
 } )( window.tinymce, window.setTimeout );

@@ -21,6 +21,10 @@
 class WP_Http {
 
 	// Aliases for HTTP response codes.
+	const HTTP_CONTINUE                   = 100;
+	const SWITCHING_PROTOCOLS             = 101;
+	const PROCESSING                      = 102;
+
 	const OK                              = 200;
 	const CREATED                         = 201;
 	const ACCEPTED                        = 202;
@@ -106,7 +110,7 @@ class WP_Http {
 	 *                                             Default '1.0'.
 	 *     @type string       $user-agent          User-agent value sent.
 	 *                                             Default WordPress/' . $wp_version . '; ' . get_bloginfo( 'url' ).
-	 *     @type bool         $reject_unsafe_urls  Whether to pass URLs through {@see wp_http_validate_url()}.
+	 *     @type bool         $reject_unsafe_urls  Whether to pass URLs through wp_http_validate_url().
 	 *                                             Default false.
 	 *     @type bool         $blocking            Whether the calling code requires the result of the request.
 	 *                                             If set to false, the request will be sent to the remote server,

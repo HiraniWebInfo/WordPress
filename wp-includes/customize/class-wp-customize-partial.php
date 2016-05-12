@@ -1,6 +1,6 @@
 <?php
 /**
- * WordPress Customize Partial class
+ * Customize API: WP_Customize_Partial class
  *
  * @package WordPress
  * @subpackage Customize
@@ -8,7 +8,7 @@
  */
 
 /**
- * Customize Partial class.
+ * Core Customizer class for implementing selective refresh partials.
  *
  * Representation of a rendered region in the previewed page that gets
  * selectively refreshed when an associated setting is changed.
@@ -90,6 +90,18 @@ class WP_Customize_Partial {
 	public $primary_setting;
 
 	/**
+	 * Capability required to edit this partial.
+	 *
+	 * Normally this is empty and the capability is derived from the capabilities
+	 * of the associated `$settings`.
+	 *
+	 * @since 4.5.0
+	 * @access public
+	 * @var string
+	 */
+	public $capability;
+
+	/**
 	 * Render callback.
 	 *
 	 * @since 4.5.0
@@ -157,7 +169,7 @@ class WP_Customize_Partial {
 		}
 
 		// Process settings.
-		if ( empty( $this->settings ) ) {
+		if ( ! isset( $this->settings ) ) {
 			$this->settings = array( $id );
 		} else if ( is_string( $this->settings ) ) {
 			$this->settings = array( $this->settings );
@@ -260,9 +272,12 @@ class WP_Customize_Partial {
 	 * @since 4.5.0
 	 * @access public
 	 *
+	 * @param WP_Customize_Partial $partial Partial.
+	 * @param array                $context Context.
 	 * @return string|array|false
 	 */
-	public function render_callback() {
+	public function render_callback( WP_Customize_Partial $partial, $context = array() ) {
+		unset( $partial, $context );
 		return false;
 	}
 
@@ -299,6 +314,9 @@ class WP_Customize_Partial {
 	 *                    or if one of the associated settings does not exist.
 	 */
 	final public function check_capabilities() {
+		if ( ! empty( $this->capability ) && ! current_user_can( $this->capability ) ) {
+			return false;
+		}
 		foreach ( $this->settings as $setting_id ) {
 			$setting = $this->component->manager->get_setting( $setting_id );
 			if ( ! $setting || ! $setting->check_capabilities() ) {

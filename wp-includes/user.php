@@ -174,7 +174,7 @@ function wp_authenticate_username_password($user, $username, $password) {
 }
 
 /**
- * Authenticate the user using the email and password.
+ * Authenticates a user using the email and password.
  *
  * @since 4.5.0
  *
@@ -302,7 +302,7 @@ function wp_authenticate_spam_check( $user ) {
 		 * @param bool    $spammed Whether the user is considered a spammer.
 		 * @param WP_User $user    User to check against.
 		 */
-		$spammed = apply_filters( 'check_is_user_spammed', is_user_spammy(), $user );
+		$spammed = apply_filters( 'check_is_user_spammed', is_user_spammy( $user ), $user );
 
 		if ( $spammed )
 			return new WP_Error( 'spammer_account', __( '<strong>ERROR</strong>: Your account has been marked as a spammer.' ) );
@@ -542,7 +542,7 @@ function delete_user_option( $user_id, $option_name, $global = false ) {
  *
  * @see WP_User_Query
  *
- * @param array $args Optional. Arguments to retrieve users. See {@see WP_User_Query::prepare_query()}
+ * @param array $args Optional. Arguments to retrieve users. See WP_User_Query::prepare_query().
  *                    for more information on accepted arguments.
  * @return array List of users.
  */
@@ -577,6 +577,25 @@ function get_blogs_of_user( $user_id, $all = false ) {
 	// Logged out users can't have blogs
 	if ( empty( $user_id ) )
 		return array();
+
+	/**
+	 * Filter the list of a user's sites before it is populated.
+	 *
+	 * Passing a non-null value to the filter will effectively short circuit
+	 * get_blogs_of_user(), returning that value instead.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @param null|array $blogs   An array of WP_Site objects of which the user is a member.
+	 * @param int        $user_id User ID.
+	 * @param bool       $all     Whether the returned array should contain all sites, including
+	 *                            those marked 'deleted', 'archived', or 'spam'. Default false.
+	 */
+	$blogs = apply_filters( 'pre_get_blogs_of_user', null, $user_id, $all );
+
+	if ( null !== $blogs ) {
+		return $blogs;
+	}
 
 	$keys = get_user_meta( $user_id );
 	if ( empty( $keys ) )
@@ -948,7 +967,7 @@ function setup_userdata($for_user_id = '') {
  *
  * @param array|string $args {
  *     Optional. Array or string of arguments to generate a drop-down of users.
- *     {@see WP_User_Query::prepare_query() for additional available arguments.
+ *     See WP_User_Query::prepare_query() for additional available arguments.
  *
  *     @type string       $show_option_all         Text to show as the drop-down default (all).
  *                                                 Default empty.
@@ -1357,7 +1376,7 @@ function validate_username( $username ) {
  *                                             https. Default false.
  *     @type string      $user_registered      Date the user registered. Format is 'Y-m-d H:i:s'.
  *     @type string|bool $show_admin_bar_front Whether to display the Admin Bar for the user on the
- *                                             site's frontend. Default true.
+ *                                             site's front end. Default true.
  *     @type string      $role                 User's role.
  * }
  * @return int|WP_Error The newly created user's ID or a WP_Error object if the user could not
@@ -1899,7 +1918,7 @@ All at ###SITENAME###
  * A simpler way of inserting a user into the database.
  *
  * Creates a new user with just the username, password, and email. For more
- * complex user creation use {@see wp_insert_user()} to specify more information.
+ * complex user creation use wp_insert_user() to specify more information.
  *
  * @since 2.0.0
  * @see wp_insert_user() More complete way to create a new user
@@ -2036,6 +2055,11 @@ function get_password_reset_key( $user ) {
 	 */
 	do_action( 'retrieve_password', $user->user_login );
 
+	$allow = true;
+	if ( is_multisite() && is_user_spammy( $user ) ) {
+		$allow = false;
+	}
+
 	/**
 	 * Filter whether to allow a password to be reset.
 	 *
@@ -2044,7 +2068,7 @@ function get_password_reset_key( $user ) {
 	 * @param bool $allow         Whether to allow the password to be reset. Default true.
 	 * @param int  $user_data->ID The ID of the user attempting to reset a password.
 	 */
-	$allow = apply_filters( 'allow_password_reset', true, $user->ID );
+	$allow = apply_filters( 'allow_password_reset', $allow, $user->ID );
 
 	if ( ! $allow ) {
 		return new WP_Error( 'no_password_reset', __( 'Password reset is not allowed for this user' ) );
@@ -2310,10 +2334,11 @@ function register_new_user( $user_login, $user_email ) {
  * Notifications are sent both to the site admin and to the newly created user.
  *
  * @since 4.4.0
+ * @since 4.6.0 The `$notify` parameter accepts 'user' for sending notification only to the user created.
  *
  * @param int    $user_id ID of the newly created user.
  * @param string $notify  Optional. Type of notification that should happen. Accepts 'admin' or an empty string
- *                        (admin only), or 'both' (admin and user). Default 'both'.
+ *                        (admin only), 'user', or 'both' (admin and user). Default 'both'.
  */
 function wp_send_new_user_notifications( $user_id, $notify = 'both' ) {
 	wp_new_user_notification( $user_id, null, $notify );
@@ -2408,19 +2433,20 @@ function wp_get_users_with_no_role() {
 }
 
 /**
- * Retrieve the current user object.
+ * Retrieves the current user object.
  *
  * Will set the current user, if the current user is not set. The current user
  * will be set to the logged-in person. If no user is logged-in, then it will
  * set the current user to 0, which is invalid and won't have any permissions.
  *
- * This function is used by the pluggable functions {@see wp_get_current_user()}
- * and {@see get_currentuserinfo()}, which is deprecated, for backward compatibility.
+ * This function is used by the pluggable functions wp_get_current_user() and
+ * get_currentuserinfo(), the latter of which is deprecated but used for backward
+ * compatibility.
  *
  * @since 4.5.0
  * @access private
  *
- * @see https://core.trac.wordpress.org/ticket/19615
+ * @see wp_get_current_user()
  * @global WP_User $current_user Checks if the current user is set.
  *
  * @return WP_User Current WP_User instance.

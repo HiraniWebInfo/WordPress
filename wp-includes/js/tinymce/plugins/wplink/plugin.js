@@ -56,21 +56,42 @@
 		renderHtml: function() {
 			return (
 				'<div id="' + this._id + '" class="wp-link-input">' +
-					'<input type="text" value="" tabindex="-1" placeholder="' + tinymce.translate('Paste URL or type to search') + '" />' +
+					'<input type="text" value="" placeholder="' + tinymce.translate( 'Paste URL or type to search' ) + '" />' +
+					'<input type="text" style="display:none" value="" />' +
 				'</div>'
 			);
 		},
 		setURL: function( url ) {
 			this.getEl().firstChild.value = url;
+		},
+		getURL: function() {
+			return tinymce.trim( this.getEl().firstChild.value );
+		},
+		getLinkText: function() {
+			var text = this.getEl().firstChild.nextSibling.value;
+
+			if ( ! tinymce.trim( text ) ) {
+				return '';
+			}
+
+			return text.replace( /[\r\n\t ]+/g, ' ' );
+		},
+		reset: function() {
+			var urlInput = this.getEl().firstChild;
+
+			urlInput.value = '';
+			urlInput.nextSibling.value = '';
 		}
 	} );
 
 	tinymce.PluginManager.add( 'wplink', function( editor ) {
-		var a;
 		var toolbar;
 		var editToolbar;
 		var previewInstance;
 		var inputInstance;
+		var linkNode;
+		var doingUndoRedo;
+		var doingUndoRedoTimer;
 		var $ = window.jQuery;
 
 		function getSelectedLink() {
@@ -90,7 +111,6 @@
 
 					if ( link ) {
 						editor.selection.select( link );
-						editor.nodeChanged();
 					}
 				}
 			}
@@ -104,15 +124,15 @@
 
 				if ( $element.attr( 'href' ) === '_wp_link_placeholder' ) {
 					editor.dom.remove( element, true );
-				} else if ( $element.attr( 'data-wp-link-edit' ) ) {
-					$element.attr( 'data-wp-link-edit', null );
+				} else if ( $element.attr( 'data-wplink-edit' ) ) {
+					$element.attr( 'data-wplink-edit', null );
 				}
 			});
 		}
 
 		function removePlaceholderStrings( content, dataAttr ) {
 			if ( dataAttr ) {
-				content = content.replace( / data-wp-link-edit="true"/g, '' );
+				content = content.replace( / data-wplink-edit="true"/g, '' );
 			}
 
 			return content.replace( /<a [^>]*?href="_wp_link_placeholder"[^>]*>([\s\S]+)<\/a>/g, '$1' );
@@ -126,35 +146,61 @@
 					'wp_link_remove'
 				], true );
 
-				editToolbar = editor.wp._createToolbar( [
+				var editButtons = [
 					'wp_link_input',
-					'wp_link_apply',
-					'wp_link_advanced'
-				], true );
+					'wp_link_apply'
+				];
+
+				if ( typeof window.wpLink !== 'undefined' ) {
+					editButtons.push( 'wp_link_advanced' );
+				}
+
+				editToolbar = editor.wp._createToolbar( editButtons, true );
 
 				editToolbar.on( 'show', function() {
-					var inputNode = editToolbar.find( 'toolbar' )[0];
+					if ( ! tinymce.$( document.body ).hasClass( 'modal-open' ) ) {
+						window.setTimeout( function() {
+							var element = editToolbar.$el.find( 'input.ui-autocomplete-input' )[0],
+								selection = linkNode && ( linkNode.textContent || linkNode.innerText );
 
-					inputNode && inputNode.focus( true );
-					a = getSelectedLink();
+							if ( element ) {
+								if ( ! element.value && selection && typeof window.wpLink !== 'undefined' ) {
+									element.value = window.wpLink.getUrlFromSelection( selection );
+								}
+
+								if ( ! doingUndoRedo ) {
+									element.focus();
+									element.select();
+								}
+							}
+						} );
+					}
 				} );
 
 				editToolbar.on( 'hide', function() {
-					editToolbar.scrolling || editor.execCommand( 'wp_link_cancel' );
+					if ( ! editToolbar.scrolling ) {
+						editor.execCommand( 'wp_link_cancel' );
+					}
 				} );
 			}
 		} );
 
 		editor.addCommand( 'WP_Link', function() {
-			var link = getSelectedLink();
+			if ( tinymce.Env.ie && tinymce.Env.ie < 10 && typeof window.wpLink !== 'undefined' ) {
+				window.wpLink.open( editor.id );
+				return;
+			}
 
-			if ( link ) {
-				editor.dom.setAttribs( link, { 'data-wp-link-edit': true } );
+			linkNode = getSelectedLink();
+			editToolbar.tempHide = false;
+
+			if ( linkNode ) {
+				editor.dom.setAttribs( linkNode, { 'data-wplink-edit': true } );
 			} else {
 				removePlaceholders();
-
 				editor.execCommand( 'mceInsertLink', false, { href: '_wp_link_placeholder' } );
-				editor.selection.select( editor.$( 'a[href="_wp_link_placeholder"]' )[0] );
+
+				linkNode = editor.$( 'a[href="_wp_link_placeholder"]' )[0];
 				editor.nodeChanged();
 			}
 		} );
@@ -164,32 +210,45 @@
 				return;
 			}
 
-			var href = tinymce.trim( inputInstance.getEl().firstChild.value );
+			var href, text;
 
-			if ( href && ! /^(?:[a-z]+:|#|\?|\.|\/)/.test( href ) ) {
-				href = 'http://' + href;
+			if ( linkNode ) {
+				href = inputInstance.getURL();
+				text = inputInstance.getLinkText();
+				editor.focus();
+
+				if ( ! href ) {
+					editor.dom.remove( linkNode, true );
+					return;
+				}
+
+				if ( ! /^(?:[a-z]+:|#|\?|\.|\/)/.test( href ) ) {
+					href = 'http://' + href;
+				}
+
+				editor.dom.setAttribs( linkNode, { href: href, 'data-wplink-edit': null } );
+
+				if ( ! tinymce.trim( linkNode.innerHTML ) ) {
+					editor.$( linkNode ).text( text || href );
+				}
 			}
 
-			if ( ! href ) {
-				editor.dom.remove( a, true );
-				return;
-			}
-
-			if ( a ) {
-				editor.dom.setAttribs( a, { href: href, 'data-wp-link-edit': null } );
-			}
-
-			a = false;
-
+			inputInstance.reset();
 			editor.nodeChanged();
-			editor.focus();
+
+			// Audible confirmation message when a link has been inserted in the Editor.
+			if ( typeof window.wp !== 'undefined' && window.wp.a11y && typeof window.wpLinkL10n !== 'undefined' ) {
+				window.wp.a11y.speak( window.wpLinkL10n.linkInserted );
+			}
 		} );
 
 		editor.addCommand( 'wp_link_cancel', function() {
-			removePlaceholders();
-			a = false;
-			editor.nodeChanged();
-			editor.focus();
+			if ( ! editToolbar.tempHide ) {
+				inputInstance.reset();
+				removePlaceholders();
+				editor.focus();
+				editToolbar.tempHide = false;
+			}
 		} );
 
 		// WP default shortcut
@@ -244,10 +303,31 @@
 
 		// Prevent adding undo levels on inserting link placeholder.
 		editor.on( 'BeforeAddUndo', function( event ) {
-			if ( event.level.content ) {
-				event.level.content = removePlaceholderStrings( event.level.content );
+			if ( event.lastLevel && event.lastLevel.content && event.level.content &&
+				event.lastLevel.content === removePlaceholderStrings( event.level.content ) ) {
+
+				event.preventDefault();
 			}
 		});
+
+		// When doing undo and redo with keyboard shortcuts (Ctrl|Cmd+Z, Ctrl|Cmd+Shift+Z, Ctrl|Cmd+Y),
+		// set a flag to not focus the inline dialog. The editor has to remain focused so the users can do consecutive undo/redo.
+		editor.on( 'keydown', function( event ) {
+			if ( event.altKey || ( tinymce.Env.mac && ( ! event.metaKey || event.ctrlKey ) ) ||
+				( ! tinymce.Env.mac && ! event.ctrlKey ) ) {
+
+				return;
+			}
+
+			if ( event.keyCode === 89 || event.keyCode === 90 ) { // Y or Z
+				doingUndoRedo = true;
+
+				window.clearTimeout( doingUndoRedoTimer );
+				doingUndoRedoTimer = window.setTimeout( function() {
+					doingUndoRedo = false;
+				}, 500 );
+			}
+		} );
 
 		editor.addButton( 'wp_link_preview', {
 			type: 'WPLinkPreview',
@@ -259,16 +339,17 @@
 		editor.addButton( 'wp_link_input', {
 			type: 'WPLinkInput',
 			onPostRender: function() {
-				var input = this.getEl().firstChild;
-				var cache;
-				var last;
+				var element = this.getEl(),
+					input = element.firstChild,
+					$input, cache, last;
 
 				inputInstance = this;
 
 				if ( $ && $.ui && $.ui.autocomplete ) {
-					$( input )
-					.on( 'keydown', function() {
-						$( input ).removeAttr( 'aria-activedescendant' );
+					$input = $( input );
+
+					$input.on( 'keydown', function() {
+						$input.removeAttr( 'aria-activedescendant' );
 					} )
 					.autocomplete( {
 						source: function( request, response ) {
@@ -294,67 +375,128 @@
 							last = request.term;
 						},
 						focus: function( event, ui ) {
-							$( input ).attr( 'aria-activedescendant', 'mce-wp-autocomplete-' + ui.item.ID );
+							$input.attr( 'aria-activedescendant', 'mce-wp-autocomplete-' + ui.item.ID );
+							/*
+							 * Don't empty the URL input field, when using the arrow keys to
+							 * highlight items. See api.jqueryui.com/autocomplete/#event-focus
+							 */
+							event.preventDefault();
 						},
 						select: function( event, ui ) {
-							$( input ).val( ui.item.permalink );
+							$input.val( ui.item.permalink );
+							$( element.firstChild.nextSibling ).val( ui.item.title );
+
+							if ( 9 === event.keyCode && typeof window.wp !== 'undefined' &&
+								window.wp.a11y && typeof window.wpLinkL10n !== 'undefined' ) {
+								// Audible confirmation message when a link has been selected.
+								window.wp.a11y.speak( window.wpLinkL10n.linkSelected );
+							}
+
 							return false;
 						},
 						open: function() {
-							$( input ).attr( 'aria-expanded', 'true' );
+							$input.attr( 'aria-expanded', 'true' );
 							editToolbar.blockHide = true;
 						},
 						close: function() {
-							$( input ).attr( 'aria-expanded', 'false' );
+							$input.attr( 'aria-expanded', 'false' );
 							editToolbar.blockHide = false;
 						},
 						minLength: 2,
 						position: {
-							my: 'left top+5'
+							my: 'left top+2'
+						},
+						messages: {
+							noResults: ( typeof window.uiAutocompleteL10n !== 'undefined' ) ? window.uiAutocompleteL10n.noResults : '',
+							results: function( number ) {
+								if ( typeof window.uiAutocompleteL10n !== 'undefined' ) {
+									if ( number > 1 ) {
+										return window.uiAutocompleteL10n.manyResults.replace( '%d', number );
+									}
+
+									return window.uiAutocompleteL10n.oneResult;
+								}
+							}
 						}
 					} ).autocomplete( 'instance' )._renderItem = function( ul, item ) {
 						return $( '<li role="option" id="mce-wp-autocomplete-' + item.ID + '">' )
-						.append( '<span>' + item.title + '</span>&nbsp;<span class="alignright">' + item.info + '</span>' )
+						.append( '<span>' + item.title + '</span>&nbsp;<span class="wp-editor-float-right">' + item.info + '</span>' )
 						.appendTo( ul );
 					};
 
-					$( input )
-					.attr( {
+					$input.attr( {
 						'role': 'combobox',
 						'aria-autocomplete': 'list',
 						'aria-expanded': 'false',
-						'aria-owns': $( input ).autocomplete( 'widget' ).attr( 'id' )
-					}  )
-					.on( 'focus', function() {
-						$( input ).autocomplete( 'search' );
+						'aria-owns': $input.autocomplete( 'widget' ).attr( 'id' )
 					} )
+					.on( 'focus', function() {
+						var inputValue = $input.val();
+						/*
+						 * Don't trigger a search if the URL field already has a link or is empty.
+						 * Also, avoids screen readers announce `No search results`.
+						 */
+						if ( inputValue && ! /^https?:/.test( inputValue ) ) {
+							$input.autocomplete( 'search' );
+						}
+					} )
+					// Returns a jQuery object containing the menu element.
 					.autocomplete( 'widget' )
-						.addClass( 'mce-wp-autocomplete' )
-						.attr( 'role', 'listbox' );
+						.addClass( 'wplink-autocomplete' )
+						.attr( 'role', 'listbox' )
+						.removeAttr( 'tabindex' ) // Remove the `tabindex=0` attribute added by jQuery UI.
+						/*
+						 * Looks like Safari and VoiceOver need an `aria-selected` attribute. See ticket #33301.
+						 * The `menufocus` and `menublur` events are the same events used to add and remove
+						 * the `ui-state-focus` CSS class on the menu items. See jQuery UI Menu Widget.
+						 */
+						.on( 'menufocus', function( event, ui ) {
+							ui.item.attr( 'aria-selected', 'true' );
+						})
+						.on( 'menublur', function() {
+							/*
+							 * The `menublur` event returns an object where the item is `null`
+							 * so we need to find the active item with other means.
+							 */
+							$( this ).find( '[aria-selected="true"]' ).removeAttr( 'aria-selected' );
+						});
 				}
 
 				tinymce.$( input ).on( 'keydown', function( event ) {
-					event.keyCode === 13 && editor.execCommand( 'wp_link_apply' );
+					if ( event.keyCode === 13 ) {
+						editor.execCommand( 'wp_link_apply' );
+						event.preventDefault();
+					}
 				} );
 			}
 		} );
 
 		editor.on( 'wptoolbar', function( event ) {
-			var anchor = editor.dom.getParent( event.element, 'a' ),
-				$anchor, href, edit;
+			var linkNode = editor.dom.getParent( event.element, 'a' ),
+				$linkNode, href, edit;
 
-			if ( anchor ) {
-				$anchor = editor.$( anchor );
-				href = $anchor.attr( 'href' );
-				edit = $anchor.attr( 'data-wp-link-edit' );
+			if ( tinymce.$( document.body ).hasClass( 'modal-open' ) ) {
+				editToolbar.tempHide = true;
+				return;
+			}
+
+			editToolbar.tempHide = false;
+
+			if ( linkNode ) {
+				$linkNode = editor.$( linkNode );
+				href = $linkNode.attr( 'href' );
+				edit = $linkNode.attr( 'data-wplink-edit' );
 
 				if ( href === '_wp_link_placeholder' || edit ) {
-					inputInstance.setURL( edit ? href : '' );
-					event.element = anchor;
+					if ( href !== '_wp_link_placeholder' && ! inputInstance.getURL() ) {
+						inputInstance.setURL( href );
+					}
+
+					event.element = linkNode;
 					event.toolbar = editToolbar;
-				} else if ( href && ! $anchor.find( 'img' ).length ) {
+				} else if ( href && ! $linkNode.find( 'img' ).length ) {
 					previewInstance.setURL( href );
-					event.element = anchor;
+					event.element = linkNode;
 					event.toolbar = toolbar;
 				}
 			}
@@ -372,17 +514,32 @@
 			cmd: 'unlink'
 		} );
 
-		// Advanced, more, options?
 		editor.addButton( 'wp_link_advanced', {
-			tooltip: 'Advanced',
+			tooltip: 'Link options',
 			icon: 'dashicon dashicons-admin-generic',
 			onclick: function() {
 				if ( typeof window.wpLink !== 'undefined' ) {
-					if ( inputInstance.getEl().firstChild.value ) {
-						editor.execCommand( 'wp_link_apply' );
+					var url = inputInstance.getURL() || null,
+						text = inputInstance.getLinkText() || null;
+
+					/*
+					 * Accessibility note: moving focus back to the editor confuses
+					 * screen readers. They will announce again the Editor ARIA role
+					 * `application` and the iframe `title` attribute.
+					 *
+					 * Unfortunately IE looses the selection when the editor iframe
+					 * looses focus, so without returning focus to the editor, the code
+					 * in the modal will not be able to get the selection, place the caret
+					 * at the same location, etc.
+					 */
+					if ( tinymce.Env.ie ) {
+						editor.focus(); // Needed for IE
 					}
 
-					window.wpLink.open( editor.id );
+					window.wpLink.open( editor.id, url, text, linkNode );
+
+					editToolbar.tempHide = true;
+					inputInstance.reset();
 				}
 			}
 		} );
@@ -393,5 +550,12 @@
 			cmd: 'wp_link_apply',
 			classes: 'widget btn primary'
 		} );
+
+		return {
+			close: function() {
+				editToolbar.tempHide = false;
+				editor.execCommand( 'wp_link_cancel' );
+			}
+		};
 	} );
 } )( window.tinymce );
